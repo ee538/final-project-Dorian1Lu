@@ -6,6 +6,9 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <set>
+#include <unordered_map>
+#include <time.h>
 
 // A Node is the location of one point in the map.
 class Node {
@@ -52,6 +55,9 @@ class TrojanMap {
   //-----------------------------------------------------
   // TODO: Implement these functions and create unit tests for them:
 
+  void init();
+  void init_TSP(std::vector<std::string> &location_id);
+
   // Get the Latitude of a Node given its id.
   double GetLat(std::string id);
 
@@ -80,7 +86,8 @@ class TrojanMap {
   // on the shortest path.
   std::vector<std::string> CalculateShortestPath(std::string location1_name,
                                                  std::string location2_name);
-
+  std::vector<std::string> CalculateShortestPath_spfa(std::string location1_name,
+                                                 std::string location2_name);
   // Given a vector of location ids, it should reorder them such that the path
   // that covers all these points has the minimum length.
   // The return value is a pair where the first member is the total_path,
@@ -90,12 +97,24 @@ class TrojanMap {
   std::pair<double, std::vector<std::vector<std::string>>> TravellingTrojan(
       std::vector<std::string> &location_ids);
 
-  //-----------------------------------------------------
+  std::pair<double, std::vector<std::vector<std::string>>> TravellingTrojan_2opt(
+      std::vector<std::string> &location_ids);
 
-  
+  //-----------------------------------------------------
+  void brute_dfs(int u, double cur, double &res, std::vector<bool> state, std::vector<int> path, const std::vector<int> &location_nums, std::vector<std::vector<int>> &all_path);
+  std::map<std::string, Node> name2node;
+  std::map<std::string, int> id2num;
+  std::map<int, std::string> num2id;
+  std::vector<std::vector<double>> G;
+
+  std::map<std::string, int> id2num_TSP;
+  std::map<int, std::string> num2id_TSP;
+  std::vector<std::vector<double>> G_TSP;
+
  private:
   // A map of ids to Nodes.
   std::map<std::string, Node> data;
+
 };
 
 #endif
