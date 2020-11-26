@@ -110,7 +110,14 @@ void TrojanMap::PrintMenu() {
     std::cout << menu;
     std::string input2;
     getline(std::cin, input2);
-    auto results = CalculateShortestPath(input1, input2);
+    std::string sw;
+    std::cout << "**************************************************************" << std::endl;
+    std::cout << "*1.Dijkstra" << std::endl << "*2.spfa" << std::endl;
+    std::cout << "**************************************************************" << std::endl;
+    getline(std::cin, sw);
+    std::vector<std::string> results;
+    if (sw == "1") results = CalculateShortestPath(input1, input2);
+    else results = CalculateShortestPath_spfa(input1, input2);
     menu = "*************************Results******************************\n";
     std::cout << menu;
     if (results.size() != 0) {
@@ -137,6 +144,13 @@ void TrojanMap::PrintMenu() {
     menu = "Please input the number of the places:";
     std::cout << menu;
     getline(std::cin, input);
+    std::string sw;
+    std::cout << "**************************************************************" << std::endl;
+    std::cout << "*1.DFS" << std::endl << "*2.2opt" << std::endl;
+    std::cout << "**************************************************************" << std::endl;
+    getline(std::cin, sw);
+    std::pair<double, std::vector<std::vector<std::string>>>  results;
+
     int num = std::stoi(input);
     std::vector<std::string> keys;
     for (auto x : data) {
@@ -148,7 +162,9 @@ void TrojanMap::PrintMenu() {
       locations.push_back(keys[rand() % keys.size()]);
     PlotPoints(locations);
     std::cout << "Calculating ..." << std::endl;
-    auto results = TravellingTrojan(locations);
+    if (sw == "1") results = TravellingTrojan(locations);
+    else results = TravellingTrojan_2opt(locations);
+    // auto results = TravellingTrojan(locations);
     menu = "*************************Results******************************\n";
     std::cout << menu;
     CreateAnimation(results.second);
@@ -344,7 +360,10 @@ std::pair<double, double> TrojanMap::GetPlotLocation(double lat, double lon) {
  * @param  {std::string} id : location id
  * @return {double}         : latitude
  */
-double TrojanMap::GetLat(std::string id) { return 0; }
+double TrojanMap::GetLat(std::string id) { 
+  init();
+  return data[id].lat;
+  }
 
 /**
  * GetLon: Get the longitude of a Node given its id. 
@@ -352,7 +371,10 @@ double TrojanMap::GetLat(std::string id) { return 0; }
  * @param  {std::string} id : location id
  * @return {double}         : longitude
  */
-double TrojanMap::GetLon(std::string id) { return 0; }
+double TrojanMap::GetLon(std::string id) { 
+  init();
+  return data[id].lon;  
+}
 
 /**
  * GetName: Get the name of a Node given its id.
@@ -360,7 +382,10 @@ double TrojanMap::GetLon(std::string id) { return 0; }
  * @param  {std::string} id : location id
  * @return {std::string}    : name
  */
-std::string TrojanMap::GetName(std::string id) { return ""; }
+std::string TrojanMap::GetName(std::string id) { 
+  init();
+  return data[id].name;
+}
 
 /**
  * GetNeighborIDs: Get the neighbor ids of a Node.
@@ -370,6 +395,7 @@ std::string TrojanMap::GetName(std::string id) { return ""; }
  */
 std::vector<std::string> TrojanMap::GetNeighborIDs(std::string id) {
     std::vector<std::string> result;
+    result = data[id].neighbors;
     return result;
 }
 
@@ -391,7 +417,17 @@ double TrojanMap::CalculateDistance(const Node &a, const Node &b) {
 
   // where 3961 is the approximate radius of the earth at the latitude of
   // Washington, D.C., in miles
-  return 0;
+  double lat1 = a.lat, lon1 = a.lon, lat2 = b.lat, lon2 = b.lon;
+  double dLat = (lat2 - lat1) * M_PI / 180.0; 
+  double dLon = (lon2 - lon1) * M_PI / 180.0; 
+
+  lat1 = (lat1) * M_PI / 180.0; 
+  lat2 = (lat2) * M_PI / 180.0; 
+
+  double aa = pow(sin(dLat / 2), 2) + pow(sin(dLon / 2), 2) * cos(lat1) * cos(lat2); 
+  double rad = 3961; 
+  double c = 2 * asin(sqrt(aa)); 
+  return rad * c; 
 }
 
 /**
@@ -402,7 +438,36 @@ double TrojanMap::CalculateDistance(const Node &a, const Node &b) {
  */
 double TrojanMap::CalculatePathLength(const std::vector<std::string> &path) {
   double sum = 0;
+  if (path.size() < 2) return sum;
+  for (int i = 1; i < path.size(); ++i)
+    sum += CalculateDistance(data[path[i - 1]], data[path[i]]);
   return sum;
+}
+
+void TrojanMap::init() {
+  if (name2node.empty()) {
+    for (const auto& [k, v] : data) {
+        name2node[v.name] = v;
+    }
+    // std::cout << name2node.size() << std::endl;
+    int id = 1;
+    for (const auto& [k, v] : data) {
+      id2num[k] = id;
+      num2id[id] = k;
+      ++id;
+    }
+    // std::cout << id2num.size() << std::endl;
+    // std::cout << "here" << std::endl;
+    G = std::vector<std::vector<double>>(3000, std::vector<double>(3000, 100000000.0));
+    for (const auto& [k, v] : data) {
+      int a = id2num[k];
+      for (const auto& ne : v.neighbors) {
+        int b = id2num[ne];
+        // std::cout << a << ' ' << b << std::endl;
+        G[a][b] = G[b][a] = CalculateDistance(v, data[ne]);
+      }
+    }
+  }
 }
 
 /**
@@ -414,6 +479,26 @@ double TrojanMap::CalculatePathLength(const std::vector<std::string> &path) {
  */
 std::vector<std::string> TrojanMap::Autocomplete(std::string name) {
   std::vector<std::string> results;
+  init();
+  auto starttime = clock();
+  for (char &c : name) c = std::tolower(c);
+
+  for (const auto& [s, v] : name2node) {
+    bool flag = true;
+    for (int i = 0, j = 0; i < name.size(); ++i, ++j) {
+      if (j >= s.size()) {
+        flag = false;
+        break;
+      }
+      if (std::tolower(s[j]) != name[i]) {
+        flag = false;
+        break;
+      }
+    }
+    if (flag) results.push_back(s);
+  }
+  auto endtime = clock();
+  std::cout << "autocomplete runtime: " << (double)(endtime - starttime) / CLOCKS_PER_SEC << 's' <<std::endl;
   return results;
 }
 
@@ -425,6 +510,14 @@ std::vector<std::string> TrojanMap::Autocomplete(std::string name) {
  */
 std::pair<double, double> TrojanMap::GetPosition(std::string name) {
   std::pair<double, double> results(-1, -1);
+  init();
+  auto starttime = clock();
+  if (name2node.find(name) != name2node.end()) {
+    auto t = name2node[name];
+    results = std::make_pair(t.lat, t.lon);
+  }
+  auto endtime = clock();
+  std::cout << "Getposition runtime: " << (double)(endtime - starttime) / CLOCKS_PER_SEC << 's' <<std::endl;
   return results;
 }
 
@@ -438,9 +531,159 @@ std::pair<double, double> TrojanMap::GetPosition(std::string name) {
  */
 std::vector<std::string> TrojanMap::CalculateShortestPath(
     std::string location1_name, std::string location2_name) {
+  
+  init();
+
+  auto starttime = clock();
+  
+  if (name2node.find(location1_name) == name2node.end() || name2node.find(location2_name) == name2node.end()) return {};
   std::vector<std::string> x;
+  std::vector<double> dist(3000, 100000000.0);
+  std::vector<bool> st(3000, false);
+  std::vector<int> pre(3000, -1);
+  int start = id2num[name2node[location1_name].id];
+  int end = id2num[name2node[location2_name].id];
+  // std::cout << start << ' ' << end << std::endl;
+  dist[start] = 0;
+  for (int i = 0; i < 2237; ++i) {
+    int j = -1;
+    for (int k = 1; k <= 2237; ++k) {
+      if (!st[k] && (j == -1 || dist[k] < dist[j]))
+        j = k;
+    }
+    if (j == -1) break;
+    // std::cout << j << std::endl;
+    for (int k = 1; k <= 2237; ++k)
+      if (dist[j] + G[j][k] < dist[k]) {
+        pre[k] = j;
+        dist[k] = dist[j] + G[j][k];
+      }
+    st[j] = true;
+  }
+  // std::cout << "here" << std::endl;
+  if (dist[end] > 100000000.0 / 2) return {};
+  int tmp = end;
+  while (tmp != start) {
+    x.push_back(num2id[tmp]);
+    tmp = pre[tmp];
+  }
+  x.push_back(num2id[start]);
+  std::reverse(x.begin(), x.end());
+
+  auto endtime = clock();
+  std::cout << "Dijikstra runtime: " << (double)(endtime - starttime) / CLOCKS_PER_SEC << 's' <<std::endl;
+  
   return x;
 }
+
+std::vector<std::string> TrojanMap::CalculateShortestPath_spfa(
+    std::string location1_name, std::string location2_name) {
+  init();
+
+  auto starttime = clock();
+  if (name2node.find(location1_name) == name2node.end() || name2node.find(location2_name) == name2node.end()) return {};
+  std::vector<std::string> x;
+  std::vector<double> dist(3000, 100000000.0);
+  std::vector<bool> st(3000, false);
+  std::vector<int> pre(3000, -1);
+  int start = id2num[name2node[location1_name].id];
+  int end = id2num[name2node[location2_name].id];
+
+
+  dist[start] = 0;
+  int hh = 0, tt = -1;
+  int q[30000] = {};
+  q[++tt] = start;
+  st[start] = true;
+  // std::cout << start << ' ' << end << std::endl;
+  while (hh <= tt) {
+    int t = q[hh++];
+    st[t] = false;
+    for (const auto& ne : data[num2id[t]].neighbors) {
+        int j = id2num[ne];
+        // std::cout << j << std::endl;
+        if (dist[j] > dist[t] + G[t][j]) {
+          dist[j] = dist[t] + G[t][j];
+          pre[j] = t;
+          if (!st[j]) {
+            q[++tt] = j;
+            st[j] = true;
+          }
+        }
+    }
+  }
+  // std::cout << "here" << std::endl;
+  if (dist[end] > 100000000.0 / 2) return {};
+  int tmp = end;
+  while (tmp != start) {
+    x.push_back(num2id[tmp]);
+    tmp = pre[tmp];
+  }
+  x.push_back(num2id[start]);
+  std::reverse(x.begin(), x.end());
+
+  auto endtime = clock();
+  std::cout << "SPFA runtime: " << (double)(endtime - starttime) / CLOCKS_PER_SEC << 's' <<std::endl;
+  
+  return x;
+}
+
+
+
+void TrojanMap::brute_dfs(int u, double cur, double& res, std::vector<bool> state, std::vector<int> path, const std::vector<int> &location_nums, std::vector<std::vector<int>> &all_path) {
+  if (u == 0) {
+    path.push_back(location_nums[0]);
+    state[location_nums[0]] = true;
+    brute_dfs(u + 1, 0, res, state, path, location_nums, all_path);
+  } 
+
+  if (cur > res) return;
+  if (u == location_nums.size()) {
+    cur += G_TSP[location_nums[0]][path.back()];
+
+
+    if (cur < res) {
+      res = cur;
+      path.push_back(location_nums[0]);
+      all_path.push_back(path);
+    }
+  }
+  for (int i = 0; i < location_nums.size(); ++i) {
+    if (state[location_nums[i]]) continue;
+    state[location_nums[i]] = true;
+    double tmp = cur + G_TSP[path.back()][location_nums[i]];
+    path.push_back(location_nums[i]);
+    brute_dfs(u + 1, tmp, res, state, path, location_nums, all_path);
+    state[location_nums[i]] = false;
+    path.pop_back();
+    
+  }
+  
+
+}
+
+void TrojanMap::init_TSP(std::vector<std::string> &location_id) {
+  id2num_TSP.clear();
+  num2id_TSP.clear();
+  G_TSP.clear();
+  int idx = 1;
+  for (const auto& id : location_id) {
+    id2num_TSP[id] = idx;
+    num2id_TSP[idx] = id;
+    idx++;
+  }
+
+  G_TSP = std::vector<std::vector<double>>(id2num_TSP.size() + 1, std::vector<double>(id2num_TSP.size() + 1, 100000000.0));
+  for (int i = 0; i < location_id.size(); ++i)
+    for (int j = 0; j < location_id.size(); ++j) {
+      if (i == j) continue;
+      int id1 = id2num_TSP[location_id[i]];
+      int id2 = id2num_TSP[location_id[j]];
+      G_TSP[id1][id2] = G_TSP[id2][id1] = CalculateDistance(data[location_id[i]], data[location_id[j]]);
+    }
+  
+}
+
 
 /**
  * Travelling salesman problem: Given a list of locations, return the shortest
@@ -449,8 +692,87 @@ std::vector<std::string> TrojanMap::CalculateShortestPath(
  * @param  {std::vector<std::string>} input : a list of locations needs to visit
  * @return {std::pair<double, std::vector<std::vector<std::string>>} : a pair of total distance and the all the progress to get final path
  */
-std::pair<double, std::vector<std::vector<std::string>>> TrojanMap::TravellingTrojan(
-                                    std::vector<std::string> &location_ids) {
+std::pair<double, std::vector<std::vector<std::string>>> TrojanMap::TravellingTrojan(std::vector<std::string> &location_ids) {
+  init_TSP(location_ids);
+  auto starttime = clock();
   std::pair<double, std::vector<std::vector<std::string>>> results;
+  double res = 1000000000.0;
+  double cur = 0;
+  int u = 0;
+  std::vector<int> path;
+  std::vector<bool> state(location_ids.size() + 1, false);
+  std::vector<std::vector<int>> all_path;
+  std::vector<int> location_nums;
+  for (const auto &s : location_ids) location_nums.push_back(id2num_TSP[s]);
+    // std::cout << "here" << std::endl;
+  brute_dfs(u, cur, res, state, path, location_nums, all_path);
+
+  std::vector<std::vector<std::string>> temp;
+  for (const auto &a : all_path) {
+    std::vector<std::string> s;
+    for (int x : a)
+      s.push_back(num2id_TSP[x]);
+    temp.push_back(s);
+  }
+  results = std::make_pair(res, temp);
+
+  auto endtime = clock();
+  std::cout << "TSP_DFS runtime: " << (double)(endtime - starttime) / CLOCKS_PER_SEC << 's' <<std::endl;
+
   return results;
 } 
+
+
+std::vector<std::string> twoopt(const std::vector<std::string> &path, int i, int k) {
+  std::vector<std::string> res(path);
+  int l = i, r = k;
+  while (l < r) {
+    swap(res[l], res[r]);
+    ++l, --r;
+  }
+  return res;
+}
+
+
+std::pair<double, std::vector<std::vector<std::string>>> TrojanMap::TravellingTrojan_2opt(std::vector<std::string> &location_ids) {
+  init_TSP(location_ids);
+  auto starttime = clock();
+  std::pair<double, std::vector<std::vector<std::string>>> results;
+  std::vector<std::string> path = location_ids;
+  std::vector<std::vector<std::string>> all_path;
+  path.push_back(path[0]);
+  double cur = CalculatePathLength(path);
+  double res = cur;
+  int n = path.size();
+  all_path.push_back(path);
+  int count = 0;
+  while (1) {
+    bool flag = false;
+    bool tobreak = false;
+    for (int i = 1; i < n - 2; i++) {
+      if (flag) break;
+      for (int k = i + 1; k <= n - 2; k++) {
+        auto new_path = twoopt(path, i, k);
+        cur = CalculatePathLength(new_path);
+        if (cur < res) {
+          ++count;
+          res = cur;
+          path = new_path;
+          all_path.push_back(path);
+          flag = true;
+          break;
+        }
+      }
+    }
+    if (!flag || count > 100000) break;
+  }
+  results = std::make_pair(res, all_path);
+
+  auto endtime = clock();
+  std::cout << "TSP_2opt runtime: " << (double)(endtime - starttime) / CLOCKS_PER_SEC << 's' <<std::endl;
+  return results;
+
+
+}
+
+
